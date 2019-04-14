@@ -1,10 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.integrate as integrate
+import sys
 plt.ion()
 
 #The essential parameters for the problem
-N_cells = 100  #the number of cells. 
+N_cells = 200  #the number of cells. 
 N = N_cells+1  #N+1 is the number of cell edges.
 CFL = 0.1  #CFL number
 dx = 1.0/N_cells  #grid spacing
@@ -13,6 +14,7 @@ v = 1.0
 CFL = 0.1
 dt = CFL*dx/v
 T = 1/v #Length of domain in code units is 1.0
+alpha = 4.0  #parameter for defining the MC limited
 
 x = np.arange(0,1+dx,dx)  #The cell edges
 f_avg_arr = np.zeros(N_cells)  #stores N-1 initial cell averaged values
@@ -43,6 +45,9 @@ def f_init_avg(x, f_choice):
         f_avg_arr[i] = f_avg[0]/dx  #the values are for the cells centered at (x[i]+x[i+1])/2
  
     return f_avg_arr
+
+def minmod(x,y):
+    return 0.5*(np.sign(x) + np.sign(y))*np.minimum(np.abs(x), np.abs(y))
         
 #function to evaluate the flux discretized flux depeding on the choice of scheme 
 def flux_discr(phi, scheme):
@@ -56,8 +61,22 @@ def flux_discr(phi, scheme):
     elif(scheme == 2): flux = -v*(phi - phi_jm1)/dx
     #third order upwind biased
     elif(scheme == 3): flux = -v*(phi/2.0 + phi_jp1/3.0 - phi_jm1 + phi_jm2/6.0)/dx
+    #MC limiter scheme
+    elif(scheme == 4):
+        phi_jp1_MP = phi + minmod(phi_jp1 - phi, alpha*(phi - phi_jm1))
+        phi_jm1_MP = phi_jm1 + minmod(phi - phi_jm1, alpha*(phi_jm1 - phi_jm2))
         
-    else: print ('Wrong choice!')
+        phi_jp1_3u = (5.0/6.0)*phi + (1.0/3.0)*phi_jp1 - (1.0/6.0)*phi_jm1
+        phi_jm1_3u = (5.0/6.0)*phi_jm1 + (1.0/3.0)*phi - (1.0/6.0)*phi_jm2
+        
+        phi_jphalf_MC = phi + minmod(phi_jp1_3u - phi, phi_jp1_MP - phi) 
+        phi_jmhalf_MC = phi_jm1 + minmod(phi_jm1_3u - phi_jm1, phi_jm1_MP - phi_jm1)
+        
+        flux = -v*(phi_jphalf_MC - phi_jmhalf_MC)/dx
+        
+    else: 
+        print('Wrong choice!')
+        sys.exit()
         
     return flux
 
@@ -77,7 +96,6 @@ def ssprk3(phi,scheme):
         phi = phi_np1  ##reassigning phi with the phi at next time step
         
         t += dt
-        plt.plot(phi)
         
     return phi
     
@@ -85,12 +103,12 @@ def ssprk3(phi,scheme):
 f_avg_arr = f_init_avg(x,2)
 
 #obtaining the final time step result
-f_avg_final = ssprk3(f_avg_arr,3)
+f_avg_final = ssprk3(f_avg_arr,4)
 
 #plotting and comparing the initial and final results after one full period
-'''plt.plot(x[1:]-0.5*dx,f_avg_arr,label='Initial profile')  #plotting the initial profile
+plt.plot(x[1:]-0.5*dx,f_avg_arr,label='Initial profile')  #plotting the initial profile
 plt.plot(x[1:]-0.5*dx,f_avg_final,label='After one period')  #plotting the final profile
 plt.ylim([-0.5,1.5])
 plt.xlim([0,1])
-plt.legend()'''
+plt.legend()
 #plt.title('Second order centered, SSPRK3, CFL = 0.1')
